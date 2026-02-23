@@ -21,8 +21,7 @@ venv/
 # pytest
 .pytest_cache/
 
-# Output
-output/
+# Database
 data/*.db
 
 # OS
