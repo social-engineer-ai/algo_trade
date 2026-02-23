@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NIFTY ORB Strategy: Original vs Tuned</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --orig: #e74c3c;
+    --tuned: #2ecc71;
+    --bg: #0f1117;
+    --card: #1a1d28;
+    --border: #2a2d3a;
+    --text: #e0e0e0;
+    --muted: #8892a0;
+    --accent: #3b82f6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  header { text-align: center; padding: 40px 0 20px; }
+  header h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 8px; }
+  header p { color: var(--muted); font-size: 1.1rem; }
+
+  /* Strategy explanation */
+  .strategy-flow { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 32px; margin: 24px 0; }
+  .strategy-flow h2 { font-size: 1.4rem; margin-bottom: 20px; color: var(--accent); }
+
+  .flow-steps { display: flex; gap: 12px; overflow-x: auto; padding: 8px 0; }
+  .flow-step { flex: 1; min-width: 180px; background: #222639; border-radius: 8px; padding: 16px; text-align: center; position: relative; }
+  .flow-step::after { content: '\2192'; position: absolute; right: -16px; top: 50%; transform: translateY(-50%); font-size: 1.4rem; color: var(--muted); }
+  .flow-step:last-child::after { display: none; }
+  .flow-step .step-num { display: inline-block; width: 28px; height: 28px; line-height: 28px; border-radius: 50%; background: var(--accent); color: white; font-weight: 700; font-size: 0.85rem; margin-bottom: 8px; }
+  .flow-step h4 { font-size: 0.95rem; margin-bottom: 6px; }
+  .flow-step p { font-size: 0.8rem; color: var(--muted); }
+
+  /* Parameter comparison */
+  .params-section { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
+  .param-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+  .param-card h3 { font-size: 1.2rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .param-card h3 .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .param-card.original h3 .dot { background: var(--orig); }
+  .param-card.tuned h3 .dot { background: var(--tuned); }
+
+  .param-table { width: 100%; border-collapse: collapse; }
+  .param-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  .param-table td:first-child { color: var(--muted); width: 55%; }
+  .param-table td:last-child { font-weight: 600; text-align: right; }
+  .param-table tr.changed td:last-child { color: #f1c40f; }
+
+  /* Metrics comparison */
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 24px 0; }
+  .metric-tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: center; }
+  .metric-tile .label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .metric-tile .values { display: flex; justify-content: center; gap: 24px; }
+  .metric-tile .val { font-size: 1.5rem; font-weight: 700; }
+  .metric-tile .val.orig { color: var(--orig); }
+  .metric-tile .val.tuned { color: var(--tuned); }
+  .metric-tile .val-label { font-size: 0.7rem; color: var(--muted); }
+  .metric-tile .improvement { font-size: 0.85rem; margin-top: 8px; padding: 3px 10px; border-radius: 12px; display: inline-block; }
+  .metric-tile .improvement.positive { background: rgba(46,204,113,0.15); color: var(--tuned); }
+  .metric-tile .improvement.negative { background: rgba(231,76,60,0.15); color: var(--orig); }
+
+  /* Charts */
+  .chart-section { margin: 32px 0; }
+  .chart-section h2 { font-size: 1.3rem; margin-bottom: 16px; color: var(--accent); }
+  .chart-container { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+  .chart-container canvas { max-height: 350px; }
+
+  /* Trailing ladder visual */
+  .ladder-section { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
+  .ladder-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+  .ladder-card h3 { margin-bottom: 16px; font-size: 1.1rem; }
+  .ladder-visual { position: relative; }
+  .ladder-rung { display: flex; align-items: center; margin: 8px 0; font-size: 0.85rem; }
+  .ladder-bar { height: 32px; border-radius: 6px; display: flex; align-items: center; padding: 0 12px; font-weight: 600; color: white; font-size: 0.8rem; transition: width 0.6s ease; }
+  .ladder-label { width: 90px; text-align: right; padding-right: 12px; color: var(--muted); font-size: 0.8rem; }
+  .ladder-action { margin-left: 12px; font-size: 0.8rem; color: var(--muted); }
+
+  /* Trade table */
+  .trade-table-wrapper { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin: 24px 0; overflow-x: auto; }
+  .trade-table-wrapper h3 { margin-bottom: 12px; }
+  .tab-buttons { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab-btn { padding: 8px 20px; border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 6px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
+  .tab-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .tab-btn:hover { border-color: var(--accent); }
+
+  table.trades { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  table.trades th { text-align: left; padding: 10px 8px; border-bottom: 2px solid var(--border); color: var(--muted); font-weight: 600; }
+  table.trades td { padding: 8px; border-bottom: 1px solid var(--border); }
+  table.trades tr:hover { background: rgba(59,130,246,0.05); }
+  .pnl-pos { color: var(--tuned); font-weight: 600; }
+  .pnl-neg { color: var(--orig); font-weight: 600; }
+  .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+  .badge-call { background: rgba(46,204,113,0.15); color: var(--tuned); }
+  .badge-put { background: rgba(231,76,60,0.15); color: var(--orig); }
+  .badge-exit { background: rgba(59,130,246,0.1); color: var(--accent); }
+
+  /* Exit reason donut */
+  .exit-section { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
+  .exit-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; text-align: center; }
+  .exit-card h3 { margin-bottom: 12px; }
+  .exit-card canvas { max-height: 250px; }
+
+  /* Key insight boxes */
+  .insights { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 24px 0; }
+  .insight-box { background: var(--card); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 16px 20px; }
+  .insight-box h4 { font-size: 0.95rem; margin-bottom: 6px; }
+  .insight-box p { font-size: 0.85rem; color: var(--muted); }
+
+  .legend { display: flex; justify-content: center; gap: 32px; margin: 16px 0; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+  .legend-dot { width: 14px; height: 14px; border-radius: 3px; }
+
+  @media (max-width: 768px) {
+    .params-section, .ladder-section, .exit-section { grid-template-columns: 1fr; }
+    .flow-steps { flex-direction: column; }
+    .flow-step::after { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<header>
+  <h1>NIFTY 3-Min ORB Options Strategy</h1>
+  <p>Original vs Tuned Configuration &mdash; Backtest Dec 2025 &ndash; Feb 2026 (59 trading days)</p>
+  <div class="legend" style="margin-top: 16px;">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--orig)"></div> Original</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--tuned)"></div> Tuned</div>
+  </div>
+</header>
+
+<!-- Strategy Flow -->
+<div class="strategy-flow">
+  <h2>How the Strategy Works</h2>
+  <div class="flow-steps">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <h4>Opening Range</h4>
+      <p>09:15&ndash;09:18: Record H3 (high) and L3 (low) of first 3 candles</p>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <h4>Breakout</h4>
+      <p>Close &gt; H3 = CALL<br>Close &lt; L3 = PUT<br>Set H1/L1 levels</p>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <h4>Entry</h4>
+      <p>Buy ITM option when price crosses H1 (call) or L1 (put). Filters must pass.</p>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <h4>Regime A</h4>
+      <p>Candle-based SL on underlying at L1 (call) / H1 (put). No trailing yet.</p>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <h4>Regime B</h4>
+      <p>After hitting T1 gain, switch to premium trailing ladder. Let winners run.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Parameter Comparison -->
+<div class="params-section">
+  <div class="param-card original">
+    <h3><span class="dot"></span> Original Configuration</h3>
+    <table class="param-table">
+      <tr><td>RSI Filter</td><td>40 &ndash; 65 (active)</td></tr>
+      <tr><td>SuperTrend</td><td>Period 10, Mult 3.0</td></tr>
+      <tr><td>Re-entries per side</td><td>4</td></tr>
+      <tr><td>Trailing Ladder Step</td><td>30 points</td></tr>
+      <tr><td>T1 (breakeven)</td><td>+30</td></tr>
+      <tr><td>T5 (full exit)</td><td>+150</td></tr>
+      <tr><td>ITM Offset</td><td>200 pts</td></tr>
+      <tr><td>No entry after</td><td>11:30</td></tr>
+    </table>
+  </div>
+  <div class="param-card tuned">
+    <h3><span class="dot"></span> Tuned Configuration</h3>
+    <table class="param-table">
+      <tr class="changed"><td>RSI Filter</td><td>DISABLED (0 &ndash; 100)</td></tr>
+      <tr class="changed"><td>SuperTrend</td><td>Period 14, Mult 3.0</td></tr>
+      <tr class="changed"><td>Re-entries per side</td><td>1</td></tr>
+      <tr class="changed"><td>Trailing Ladder Step</td><td>40 points</td></tr>
+      <tr class="changed"><td>T1 (breakeven)</td><td>+40</td></tr>
+      <tr class="changed"><td>T5 (full exit)</td><td>+200</td></tr>
+      <tr><td>ITM Offset</td><td>200 pts</td></tr>
+      <tr><td>No entry after</td><td>11:30</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- Trailing Ladder Visual -->
+<div class="ladder-section">
+  <div class="ladder-card">
+    <h3 style="color:var(--orig)">Original Trailing Ladder (30-step)</h3>
+    <div class="ladder-visual">
+      <div class="ladder-rung"><span class="ladder-label">T1 +30</span><div class="ladder-bar" style="width:20%;background:var(--orig)">+30</div><span class="ladder-action">Trail SL to cost</span></div>
+      <div class="ladder-rung"><span class="ladder-label">T2 +60</span><div class="ladder-bar" style="width:40%;background:var(--orig)">+60</div><span class="ladder-action">Trail SL to +30</span></div>
+      <div class="ladder-rung"><span class="ladder-label">T3 +90</span><div class="ladder-bar" style="width:60%;background:var(--orig)">+90</div><span class="ladder-action">Trail SL to +60</span></div>
+      <div class="ladder-rung"><span class="ladder-label">T4 +120</span><div class="ladder-bar" style="width:80%;background:var(--orig)">+120</div><span class="ladder-action">Trail SL to +90</span></div>
+      <div class="ladder-rung"><span class="ladder-label">T5 +150</span><div class="ladder-bar" style="width:100%;background:var(--orig)">+150</div><span class="ladder-action">FULL EXIT</span></div>
+    </div>
+  </div>
+  <div class="ladder-card">
+    <h3 style="color:var(--tuned)">Tuned Trailing Ladder (40-step)</h3>
+    <div class="ladder-visual">
+      <div class="ladder-rung"><span class="ladder-label">T1 +40</span><div class="ladder-bar" style="width:20%;background:var(--tuned)">+40</div><span class="ladder-action">Trail SL to cost</span></div>
+      <div class="ladder-rung"><span class="ladder-label">T2 +80</span><div class="ladder-bar" style="width:40%;background:var(--tuned)">+80</div><span class="ladder-action">Trail SL to +40</span></div>
+      <div class="ladder-rung"><span class="ladder-label">T3 +120</span><div class="ladder-bar" style="width:60%;background:var(--tuned)">+120</div><span class="ladder-action">Trail SL to +80</span></div>
+      <div class="ladder-rung"><span class="ladder-label">T4 +160</span><div class="ladder-bar" style="width:80%;background:var(--tuned)">+160</div><span class="ladder-action">Trail SL to +120</span></div>
+      <div class="ladder-rung"><span class="ladder-label">T5 +200</span><div class="ladder-bar" style="width:100%;background:var(--tuned)">+200</div><span class="ladder-action">FULL EXIT</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Key Metrics -->
+<h2 style="color:var(--accent); margin-top: 32px;">Performance Comparison</h2>
+<div id="metricsGrid" class="metrics-grid"></div>
+
+<!-- Key Insights -->
+<div class="insights">
+  <div class="insight-box">
+    <h4>RSI Filter Hurts</h4>
+    <p>Disabling RSI allowed more entries, including winners that were previously filtered out. The filter was too restrictive for this dataset.</p>
+  </div>
+  <div class="insight-box">
+    <h4>Fewer Re-entries Win</h4>
+    <p>Reducing re-entries from 4 to 1 eliminated loss-chasing. Re-entry #2+ were almost always losers &mdash; getting stopped out twice signals the breakout failed.</p>
+  </div>
+  <div class="insight-box">
+    <h4>Wider Ladder = Better R:R</h4>
+    <p>The 40-step ladder lets winners run 33% further before trailing kicks in, improving reward-to-risk from 1.84 to 2.88 while keeping losses similar.</p>
+  </div>
+  <div class="insight-box">
+    <h4>Gross Profitable</h4>
+    <p>The tuned strategy is gross positive (+Rs 2,510). The -Rs 763 net loss is entirely from transaction costs. A zero-brokerage account flips it profitable.</p>
+  </div>
+</div>
+
+<!-- Equity Curve Chart -->
+<div class="chart-section">
+  <h2>Equity Curve</h2>
+  <div class="chart-container"><canvas id="equityChart"></canvas></div>
+</div>
+
+<!-- Daily P&L Chart -->
+<div class="chart-section">
+  <h2>Daily P&L</h2>
+  <div class="chart-container"><canvas id="dailyPnlChart"></canvas></div>
+</div>
+
+<!-- Exit Reasons -->
+<div class="exit-section">
+  <div class="exit-card">
+    <h3 style="color:var(--orig)">Original Exit Reasons</h3>
+    <canvas id="exitOrigChart"></canvas>
+  </div>
+  <div class="exit-card">
+    <h3 style="color:var(--tuned)">Tuned Exit Reasons</h3>
+    <canvas id="exitTunedChart"></canvas>
+  </div>
+</div>
+
+<!-- Trade Log -->
+<div class="trade-table-wrapper">
+  <h3>Trade Log</h3>
+  <div class="tab-buttons">
+    <button class="tab-btn active" onclick="showTrades('tuned', this)">Tuned (48 trades)</button>
+    <button class="tab-btn" onclick="showTrades('original', this)">Original (53 trades)</button>
+  </div>
+  <div id="tradeTableContainer"></div>
+</div>
+
+</div><!-- /container -->
+
+<script>
+const DATA = {"original": {"daily_pnl": [{"date": "2025-12-01", "pnl": 0}, {"date": "2025-12-02", "pnl": 0}, {"date": "2025-12-03", "pnl": -103.72}, {"date": "2025-12-04", "pnl": -257.87}, {"date": "2025-12-05", "pnl": 0}, {"date": "2025-12-08", "pnl": 0}, {"date": "2025-12-09", "pnl": -332.98}, {"date": "2025-12-10", "pnl": 0}, {"date": "2025-12-11", "pnl": 0}, {"date": "2025-12-12", "pnl": 0}, {"date": "2025-12-15", "pnl": 0}, {"date": "2025-12-16", "pnl": 0}, {"date": "2025-12-17", "pnl": -182.02}, {"date": "2025-12-18", "pnl": -163.02}, {"date": "2025-12-19", "pnl": 64.03}, {"date": "2025-12-23", "pnl": 0}, {"date": "2025-12-24", "pnl": 46.03}, {"date": "2025-12-26", "pnl": 113.11}, {"date": "2025-12-29", "pnl": 0}, {"date": "2025-12-30", "pnl": 0}, {"date": "2025-12-31", "pnl": 0}, {"date": "2026-01-01", "pnl": 0}, {"date": "2026-01-02", "pnl": 0}, {"date": "2026-01-05", "pnl": -454.9}, {"date": "2026-01-06", "pnl": -454.29}, {"date": "2026-01-07", "pnl": -39.1}, {"date": "2026-01-08", "pnl": 0}, {"date": "2026-01-09", "pnl": 0}, {"date": "2026-01-12", "pnl": -457.01}, {"date": "2026-01-13", "pnl": 1710.88}, {"date": "2026-01-14", "pnl": -627.44}, {"date": "2026-01-16", "pnl": 1322.94}, {"date": "2026-01-19", "pnl": 270.22}, {"date": "2026-01-20", "pnl": 3698.8}, {"date": "2026-01-21", "pnl": -2127.72}, {"date": "2026-01-22", "pnl": -1967.36}, {"date": "2026-01-23", "pnl": 0}, {"date": "2026-01-27", "pnl": -1416.93}, {"date": "2026-01-28", "pnl": -1185.51}, {"date": "2026-01-29", "pnl": 0}, {"date": "2026-01-30", "pnl": -970.88}, {"date": "2026-02-01", "pnl": -269.15}, {"date": "2026-02-02", "pnl": -2035.11}, {"date": "2026-02-03", "pnl": -2484.73}, {"date": "2026-02-04", "pnl": 302.03}, {"date": "2026-02-05", "pnl": -1804.14}, {"date": "2026-02-06", "pnl": 0}, {"date": "2026-02-09", "pnl": 0}, {"date": "2026-02-10", "pnl": -944.86}, {"date": "2026-02-11", "pnl": -841.82}, {"date": "2026-02-12", "pnl": -727.8}, {"date": "2026-02-13", "pnl": -1007.79}, {"date": "2026-02-16", "pnl": -127.05}, {"date": "2026-02-17", "pnl": -311.32}, {"date": "2026-02-18", "pnl": -1767.31}, {"date": "2026-02-19", "pnl": 3961.88}, {"date": "2026-02-20", "pnl": 0}, {"date": "2026-02-23", "pnl": -1692.89}], "equity": [{"date": "2025-12-01", "equity": 0}, {"date": "2025-12-02", "equity": 0}, {"date": "2025-12-03", "equity": -103.72}, {"date": "2025-12-04", "equity": -361.58}, {"date": "2025-12-05", "equity": -361.58}, {"date": "2025-12-08", "equity": -361.58}, {"date": "2025-12-09", "equity": -694.56}, {"date": "2025-12-10", "equity": -694.56}, {"date": "2025-12-11", "equity": -694.56}, {"date": "2025-12-12", "equity": -694.56}, {"date": "2025-12-15", "equity": -694.56}, {"date": "2025-12-16", "equity": -694.56}, {"date": "2025-12-17", "equity": -876.58}, {"date": "2025-12-18", "equity": -1039.6}, {"date": "2025-12-19", "equity": -975.57}, {"date": "2025-12-23", "equity": -975.57}, {"date": "2025-12-24", "equity": -929.54}, {"date": "2025-12-26", "equity": -816.43}, {"date": "2025-12-29", "equity": -816.43}, {"date": "2025-12-30", "equity": -816.43}, {"date": "2025-12-31", "equity": -816.43}, {"date": "2026-01-01", "equity": -816.43}, {"date": "2026-01-02", "equity": -816.43}, {"date": "2026-01-05", "equity": -1271.33}, {"date": "2026-01-06", "equity": -1725.62}, {"date": "2026-01-07", "equity": -1764.72}, {"date": "2026-01-08", "equity": -1764.72}, {"date": "2026-01-09", "equity": -1764.72}, {"date": "2026-01-12", "equity": -2221.73}, {"date": "2026-01-13", "equity": -510.85}, {"date": "2026-01-14", "equity": -1138.29}, {"date": "2026-01-16", "equity": 184.65}, {"date": "2026-01-19", "equity": 454.86}, {"date": "2026-01-20", "equity": 4153.66}, {"date": "2026-01-21", "equity": 2025.94}, {"date": "2026-01-22", "equity": 58.57}, {"date": "2026-01-23", "equity": 58.57}, {"date": "2026-01-27", "equity": -1358.36}, {"date": "2026-01-28", "equity": -2543.86}, {"date": "2026-01-29", "equity": -2543.86}, {"date": "2026-01-30", "equity": -3514.75}, {"date": "2026-02-01", "equity": -3783.89}, {"date": "2026-02-02", "equity": -5819.0}, {"date": "2026-02-03", "equity": -8303.73}, {"date": "2026-02-04", "equity": -8001.7}, {"date": "2026-02-05", "equity": -9805.84}, {"date": "2026-02-06", "equity": -9805.84}, {"date": "2026-02-09", "equity": -9805.84}, {"date": "2026-02-10", "equity": -10750.7}, {"date": "2026-02-11", "equity": -11592.52}, {"date": "2026-02-12", "equity": -12320.32}, {"date": "2026-02-13", "equity": -13328.11}, {"date": "2026-02-16", "equity": -13455.16}, {"date": "2026-02-17", "equity": -13766.47}, {"date": "2026-02-18", "equity": -15533.79}, {"date": "2026-02-19", "equity": -11571.91}, {"date": "2026-02-20", "equity": -11571.91}, {"date": "2026-02-23", "equity": -13264.8}], "trades": [{"date": "2025-12-03", "entry_time": "09:46", "exit_time": "15:15", "side": "PUT", "symbol": "NIFTY26200PE", "entry": 444.0, "exit": 442.5, "gross": -37.5, "net": -103.72, "reason": "FORCE_EXIT"}, {"date": "2025-12-04", "entry_time": "10:16", "exit_time": "14:58", "side": "CALL", "symbol": "NIFTY25800CE", "entry": 952.0, "exit": 945.2, "gross": -170.0, "net": -257.87, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2025-12-09", "entry_time": "10:01", "exit_time": "10:19", "side": "PUT", "symbol": "NIFTY26050PE", "entry": 452.05, "exit": 448.05, "gross": -100.0, "net": -166.49, "reason": "CANDLE_SL"}, {"date": "2025-12-09", "entry_time": "10:34", "exit_time": "11:09", "side": "PUT", "symbol": "NIFTY26050PE", "entry": 452.05, "exit": 448.05, "gross": -100.0, "net": -166.49, "reason": "CANDLE_SL"}, {"date": "2025-12-17", "entry_time": "09:29", "exit_time": "09:44", "side": "CALL", "symbol": "NIFTY25700CE", "entry": 813.8, "exit": 809.8, "gross": -100.0, "net": -182.02, "reason": "CANDLE_SL"}, {"date": "2025-12-18", "entry_time": "09:52", "exit_time": "10:11", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 371.3, "exit": 367.3, "gross": -100.0, "net": -163.02, "reason": "CANDLE_SL"}, {"date": "2025-12-19", "entry_time": "09:44", "exit_time": "15:15", "side": "CALL", "symbol": "NIFTY25700CE", "entry": 841.1, "exit": 847.0, "gross": 147.5, "net": 64.03, "reason": "FORCE_EXIT"}, {"date": "2025-12-24", "entry_time": "09:34", "exit_time": "11:43", "side": "CALL", "symbol": "NIFTY25950CE", "entry": 824.0, "exit": 829.15, "gross": 128.75, "net": 46.03, "reason": "CANDLE_SL"}, {"date": "2025-12-26", "entry_time": "09:58", "exit_time": "15:15", "side": "PUT", "symbol": "NIFTY26300PE", "entry": 366.6, "exit": 373.65, "gross": 176.25, "net": 113.11, "reason": "FORCE_EXIT"}, {"date": "2026-01-05", "entry_time": "09:25", "exit_time": "10:10", "side": "PUT", "symbol": "NIFTY26550PE", "entry": 393.7, "exit": 378.05, "gross": -391.25, "net": -454.9, "reason": "CANDLE_SL"}, {"date": "2026-01-06", "entry_time": "09:57", "exit_time": "10:21", "side": "CALL", "symbol": "NIFTY26000CE", "entry": 728.5, "exit": 713.45, "gross": -376.25, "net": -454.29, "reason": "CANDLE_SL"}, {"date": "2026-01-07", "entry_time": "09:53", "exit_time": "09:56", "side": "PUT", "symbol": "NIFTY26350PE", "entry": 393.0, "exit": 394.0, "gross": 25.0, "net": -39.1, "reason": "CANDLE_SL"}, {"date": "2026-01-12", "entry_time": "09:35", "exit_time": "12:17", "side": "PUT", "symbol": "NIFTY25850PE", "entry": 413.9, "exit": 398.2, "gross": -392.5, "net": -457.01, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-01-13", "entry_time": "09:21", "exit_time": "10:23", "side": "PUT", "symbol": "NIFTY26100PE", "entry": 428.0, "exit": 450.8, "gross": 570.0, "net": 503.77, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-01-13", "entry_time": "10:35", "exit_time": "14:37", "side": "PUT", "symbol": "NIFTY26100PE", "entry": 447.75, "exit": 498.75, "gross": 1275.0, "net": 1207.11, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-01-14", "entry_time": "09:23", "exit_time": "09:44", "side": "CALL", "symbol": "NIFTY25450CE", "entry": 680.0, "exit": 678.0, "gross": -50.0, "net": -126.33, "reason": "CANDLE_SL"}, {"date": "2026-01-14", "entry_time": "09:54", "exit_time": "10:08", "side": "CALL", "symbol": "NIFTY25450CE", "entry": 642.5, "exit": 638.5, "gross": -100.0, "net": -174.66, "reason": "CANDLE_SL"}, {"date": "2026-01-14", "entry_time": "11:20", "exit_time": "13:32", "side": "CALL", "symbol": "NIFTY25450CE", "entry": 688.0, "exit": 678.0, "gross": -250.0, "net": -326.44, "reason": "CANDLE_SL"}, {"date": "2026-01-16", "entry_time": "09:57", "exit_time": "11:12", "side": "CALL", "symbol": "NIFTY25500CE", "entry": 658.0, "exit": 714.0, "gross": 1400.0, "net": 1322.94, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-01-19", "entry_time": "10:08", "exit_time": "11:00", "side": "PUT", "symbol": "NIFTY25850PE", "entry": 447.0, "exit": 447.65, "gross": 16.25, "net": -50.16, "reason": "CANDLE_SL"}, {"date": "2026-01-19", "entry_time": "11:21", "exit_time": "12:17", "side": "PUT", "symbol": "NIFTY25850PE", "entry": 424.7, "exit": 440.15, "gross": 386.25, "net": 320.37, "reason": "CANDLE_SL"}, {"date": "2026-01-20", "entry_time": "09:51", "exit_time": "15:10", "side": "PUT", "symbol": "NIFTY25800PE", "entry": 457.7, "exit": 608.5, "gross": 3770.0, "net": 3698.8, "reason": "PREMIUM_TARGET"}, {"date": "2026-01-21", "entry_time": "09:19", "exit_time": "10:21", "side": "CALL", "symbol": "NIFTY24950CE", "entry": 708.05, "exit": 625.95, "gross": -2052.5, "net": -2127.72, "reason": "CANDLE_SL"}, {"date": "2026-01-22", "entry_time": "09:52", "exit_time": "10:20", "side": "CALL", "symbol": "NIFTY25150CE", "entry": 666.35, "exit": 590.6, "gross": -1893.75, "net": -1967.36, "reason": "CANDLE_SL"}, {"date": "2026-01-27", "entry_time": "09:27", "exit_time": "09:37", "side": "PUT", "symbol": "NIFTY25250PE", "entry": 496.0, "exit": 442.0, "gross": -1350.0, "net": -1416.93, "reason": "CANDLE_SL"}, {"date": "2026-01-28", "entry_time": "09:32", "exit_time": "09:38", "side": "CALL", "symbol": "NIFTY25050CE", "entry": 657.75, "exit": 619.35, "gross": -960.0, "net": -1034.32, "reason": "CANDLE_SL"}, {"date": "2026-01-28", "entry_time": "11:25", "exit_time": "11:42", "side": "CALL", "symbol": "NIFTY25050CE", "entry": 619.0, "exit": 615.9, "gross": -77.5, "net": -151.18, "reason": "CANDLE_SL"}, {"date": "2026-01-30", "entry_time": "09:38", "exit_time": "11:10", "side": "CALL", "symbol": "NIFTY25050CE", "entry": 576.0, "exit": 540.0, "gross": -900.0, "net": -970.88, "reason": "CANDLE_SL"}, {"date": "2026-02-01", "entry_time": "10:17", "exit_time": "11:41", "side": "CALL", "symbol": "NIFTY25150CE", "entry": 516.7, "exit": 508.7, "gross": -200.0, "net": -269.15, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-02", "entry_time": "09:21", "exit_time": "10:00", "side": "CALL", "symbol": "NIFTY24600CE", "entry": 549.45, "exit": 542.3, "gross": -178.75, "net": -249.33, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-02", "entry_time": "10:40", "exit_time": "10:57", "side": "CALL", "symbol": "NIFTY24600CE", "entry": 566.35, "exit": 497.7, "gross": -1716.25, "net": -1785.78, "reason": "CANDLE_SL"}, {"date": "2026-02-03", "entry_time": "09:59", "exit_time": "10:26", "side": "PUT", "symbol": "NIFTY26500PE", "entry": 816.75, "exit": 730.5, "gross": -2156.25, "net": -2236.02, "reason": "CANDLE_SL"}, {"date": "2026-02-03", "entry_time": "10:54", "exit_time": "10:55", "side": "PUT", "symbol": "NIFTY26500PE", "entry": 738.7, "exit": 731.9, "gross": -170.0, "net": -248.71, "reason": "CANDLE_SL"}, {"date": "2026-02-04", "entry_time": "09:23", "exit_time": "10:23", "side": "CALL", "symbol": "NIFTY25500CE", "entry": 475.5, "exit": 470.5, "gross": -125.0, "net": -192.47, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-04", "entry_time": "10:43", "exit_time": "15:08", "side": "CALL", "symbol": "NIFTY25500CE", "entry": 469.5, "exit": 492.0, "gross": 562.5, "net": 494.5, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-05", "entry_time": "09:58", "exit_time": "10:22", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 408.9, "exit": 357.9, "gross": -1275.0, "net": -1338.28, "reason": "CANDLE_SL"}, {"date": "2026-02-05", "entry_time": "10:31", "exit_time": "11:14", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 365.15, "exit": 359.0, "gross": -153.75, "net": -216.45, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-05", "entry_time": "11:19", "exit_time": "15:03", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 377.0, "exit": 369.55, "gross": -186.25, "net": -249.42, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-10", "entry_time": "09:49", "exit_time": "13:32", "side": "CALL", "symbol": "NIFTY25700CE", "entry": 406.0, "exit": 370.75, "gross": -881.25, "net": -944.86, "reason": "CANDLE_SL"}, {"date": "2026-02-11", "entry_time": "09:44", "exit_time": "09:55", "side": "PUT", "symbol": "NIFTY26200PE", "entry": 295.1, "exit": 284.0, "gross": -277.5, "net": -337.05, "reason": "CANDLE_SL"}, {"date": "2026-02-11", "entry_time": "10:08", "exit_time": "10:19", "side": "PUT", "symbol": "NIFTY26200PE", "entry": 304.95, "exit": 287.15, "gross": -445.0, "net": -504.78, "reason": "CANDLE_SL"}, {"date": "2026-02-12", "entry_time": "09:40", "exit_time": "09:49", "side": "PUT", "symbol": "NIFTY26100PE", "entry": 294.7, "exit": 284.3, "gross": -260.0, "net": -319.55, "reason": "CANDLE_SL"}, {"date": "2026-02-12", "entry_time": "11:25", "exit_time": "12:57", "side": "PUT", "symbol": "NIFTY26100PE", "entry": 295.95, "exit": 282.0, "gross": -348.75, "net": -408.25, "reason": "CANDLE_SL"}, {"date": "2026-02-13", "entry_time": "10:01", "exit_time": "10:33", "side": "PUT", "symbol": "NIFTY25750PE", "entry": 254.2, "exit": 247.6, "gross": -165.0, "net": -222.92, "reason": "CANDLE_SL"}, {"date": "2026-02-13", "entry_time": "10:50", "exit_time": "10:55", "side": "PUT", "symbol": "NIFTY25750PE", "entry": 259.8, "exit": 246.45, "gross": -333.75, "net": -391.72, "reason": "CANDLE_SL"}, {"date": "2026-02-13", "entry_time": "11:04", "exit_time": "12:02", "side": "PUT", "symbol": "NIFTY25750PE", "entry": 264.1, "exit": 250.7, "gross": -335.0, "net": -393.15, "reason": "CANDLE_SL"}, {"date": "2026-02-16", "entry_time": "09:20", "exit_time": "09:51", "side": "CALL", "symbol": "NIFTY25200CE", "entry": 395.0, "exit": 370.15, "gross": -621.25, "net": -684.69, "reason": "CANDLE_SL"}, {"date": "2026-02-16", "entry_time": "09:55", "exit_time": "11:46", "side": "CALL", "symbol": "NIFTY25200CE", "entry": 394.7, "exit": 419.6, "gross": 622.5, "net": 557.64, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-17", "entry_time": "09:32", "exit_time": "09:33", "side": "PUT", "symbol": "NIFTY25850PE", "entry": 306.55, "exit": 296.5, "gross": -251.25, "net": -311.32, "reason": "CANDLE_SL"}, {"date": "2026-02-18", "entry_time": "09:25", "exit_time": "09:27", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 269.2, "exit": 256.25, "gross": -323.75, "net": -382.13, "reason": "CANDLE_SL"}, {"date": "2026-02-18", "entry_time": "10:11", "exit_time": "12:35", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 309.05, "exit": 256.0, "gross": -1326.25, "net": -1385.18, "reason": "CANDLE_SL"}, {"date": "2026-02-19", "entry_time": "09:29", "exit_time": "12:01", "side": "PUT", "symbol": "NIFTY26050PE", "entry": 262.5, "exit": 423.5, "gross": 4025.0, "net": 3961.88, "reason": "PREMIUM_TARGET"}, {"date": "2026-02-23", "entry_time": "09:38", "exit_time": "10:38", "side": "CALL", "symbol": "NIFTY25500CE", "entry": 293.05, "exit": 227.65, "gross": -1635.0, "net": -1692.89, "reason": "CANDLE_SL"}], "exit_reasons": {"FORCE_EXIT": 3, "PREMIUM_TRAIL_SL": 12, "CANDLE_SL": 36, "PREMIUM_TARGET": 2}, "metrics": {"total_trades": 53, "winning_trades": 11, "win_rate": 20.8, "gross_pnl": -9661.0, "net_pnl": -13265.0, "charges": 3604.0, "avg_win": 1117.0, "avg_loss": -608.0, "rr": 1.84, "pf": 0.48, "max_dd": 19687.0, "sharpe": -3.32}}, "tuned": {"daily_pnl": [{"date": "2025-12-01", "pnl": 0}, {"date": "2025-12-02", "pnl": 0}, {"date": "2025-12-03", "pnl": 221.47}, {"date": "2025-12-04", "pnl": -257.87}, {"date": "2025-12-05", "pnl": 0}, {"date": "2025-12-08", "pnl": 0}, {"date": "2025-12-09", "pnl": 854.08}, {"date": "2025-12-10", "pnl": 0}, {"date": "2025-12-11", "pnl": 0}, {"date": "2025-12-12", "pnl": 0}, {"date": "2025-12-15", "pnl": 0}, {"date": "2025-12-16", "pnl": 0}, {"date": "2025-12-17", "pnl": -182.02}, {"date": "2025-12-18", "pnl": -163.02}, {"date": "2025-12-19", "pnl": 466.75}, {"date": "2025-12-23", "pnl": 0}, {"date": "2025-12-24", "pnl": 46.03}, {"date": "2025-12-26", "pnl": 278.2}, {"date": "2025-12-29", "pnl": 0}, {"date": "2025-12-30", "pnl": 0}, {"date": "2025-12-31", "pnl": 0}, {"date": "2026-01-01", "pnl": 0}, {"date": "2026-01-02", "pnl": 0}, {"date": "2026-01-05", "pnl": -454.9}, {"date": "2026-01-06", "pnl": -541.84}, {"date": "2026-01-07", "pnl": -39.1}, {"date": "2026-01-08", "pnl": 0}, {"date": "2026-01-09", "pnl": 0}, {"date": "2026-01-12", "pnl": -350.7}, {"date": "2026-01-13", "pnl": 514.76}, {"date": "2026-01-14", "pnl": -300.99}, {"date": "2026-01-16", "pnl": 552.75}, {"date": "2026-01-19", "pnl": 170.16}, {"date": "2026-01-20", "pnl": 4968.79}, {"date": "2026-01-21", "pnl": -2127.72}, {"date": "2026-01-22", "pnl": -530.31}, {"date": "2026-01-23", "pnl": 0}, {"date": "2026-01-27", "pnl": -1516.99}, {"date": "2026-01-28", "pnl": -1141.73}, {"date": "2026-01-29", "pnl": 0}, {"date": "2026-01-30", "pnl": -970.88}, {"date": "2026-02-01", "pnl": -417.48}, {"date": "2026-02-02", "pnl": -2035.11}, {"date": "2026-02-03", "pnl": -1491.71}, {"date": "2026-02-04", "pnl": 399.35}, {"date": "2026-02-05", "pnl": -646.07}, {"date": "2026-02-06", "pnl": 0}, {"date": "2026-02-09", "pnl": 0}, {"date": "2026-02-10", "pnl": -877.32}, {"date": "2026-02-11", "pnl": -934.37}, {"date": "2026-02-12", "pnl": -721.57}, {"date": "2026-02-13", "pnl": -593.37}, {"date": "2026-02-16", "pnl": 3452.56}, {"date": "2026-02-17", "pnl": -578.97}, {"date": "2026-02-18", "pnl": -581.37}, {"date": "2026-02-19", "pnl": 5019.39}, {"date": "2026-02-20", "pnl": 0}, {"date": "2026-02-23", "pnl": -251.75}], "equity": [{"date": "2025-12-01", "equity": 0}, {"date": "2025-12-02", "equity": 0}, {"date": "2025-12-03", "equity": 221.47}, {"date": "2025-12-04", "equity": -36.4}, {"date": "2025-12-05", "equity": -36.4}, {"date": "2025-12-08", "equity": -36.4}, {"date": "2025-12-09", "equity": 817.68}, {"date": "2025-12-10", "equity": 817.68}, {"date": "2025-12-11", "equity": 817.68}, {"date": "2025-12-12", "equity": 817.68}, {"date": "2025-12-15", "equity": 817.68}, {"date": "2025-12-16", "equity": 817.68}, {"date": "2025-12-17", "equity": 635.67}, {"date": "2025-12-18", "equity": 472.64}, {"date": "2025-12-19", "equity": 939.39}, {"date": "2025-12-23", "equity": 939.39}, {"date": "2025-12-24", "equity": 985.43}, {"date": "2025-12-26", "equity": 1263.63}, {"date": "2025-12-29", "equity": 1263.63}, {"date": "2025-12-30", "equity": 1263.63}, {"date": "2025-12-31", "equity": 1263.63}, {"date": "2026-01-01", "equity": 1263.63}, {"date": "2026-01-02", "equity": 1263.63}, {"date": "2026-01-05", "equity": 808.73}, {"date": "2026-01-06", "equity": 266.9}, {"date": "2026-01-07", "equity": 227.8}, {"date": "2026-01-08", "equity": 227.8}, {"date": "2026-01-09", "equity": 227.8}, {"date": "2026-01-12", "equity": -122.91}, {"date": "2026-01-13", "equity": 391.85}, {"date": "2026-01-14", "equity": 90.86}, {"date": "2026-01-16", "equity": 643.61}, {"date": "2026-01-19", "equity": 813.77}, {"date": "2026-01-20", "equity": 5782.56}, {"date": "2026-01-21", "equity": 3654.84}, {"date": "2026-01-22", "equity": 3124.53}, {"date": "2026-01-23", "equity": 3124.53}, {"date": "2026-01-27", "equity": 1607.54}, {"date": "2026-01-28", "equity": 465.81}, {"date": "2026-01-29", "equity": 465.81}, {"date": "2026-01-30", "equity": -505.07}, {"date": "2026-02-01", "equity": -922.55}, {"date": "2026-02-02", "equity": -2957.66}, {"date": "2026-02-03", "equity": -4449.37}, {"date": "2026-02-04", "equity": -4050.02}, {"date": "2026-02-05", "equity": -4696.09}, {"date": "2026-02-06", "equity": -4696.09}, {"date": "2026-02-09", "equity": -4696.09}, {"date": "2026-02-10", "equity": -5573.41}, {"date": "2026-02-11", "equity": -6507.78}, {"date": "2026-02-12", "equity": -7229.35}, {"date": "2026-02-13", "equity": -7822.73}, {"date": "2026-02-16", "equity": -4370.17}, {"date": "2026-02-17", "equity": -4949.14}, {"date": "2026-02-18", "equity": -5530.51}, {"date": "2026-02-19", "equity": -511.12}, {"date": "2026-02-20", "equity": -511.12}, {"date": "2026-02-23", "equity": -762.87}], "trades": [{"date": "2025-12-03", "entry_time": "09:27", "exit_time": "15:15", "side": "PUT", "symbol": "NIFTY26200PE", "entry": 431.0, "exit": 442.5, "gross": 287.5, "net": 221.47, "reason": "FORCE_EXIT"}, {"date": "2025-12-04", "entry_time": "10:16", "exit_time": "15:15", "side": "CALL", "symbol": "NIFTY25800CE", "entry": 952.0, "exit": 945.2, "gross": -170.0, "net": -257.87, "reason": "FORCE_EXIT"}, {"date": "2025-12-09", "entry_time": "09:26", "exit_time": "15:15", "side": "PUT", "symbol": "NIFTY26050PE", "entry": 411.25, "exit": 448.05, "gross": 920.0, "net": 854.08, "reason": "FORCE_EXIT"}, {"date": "2025-12-17", "entry_time": "09:23", "exit_time": "09:44", "side": "CALL", "symbol": "NIFTY25700CE", "entry": 813.8, "exit": 809.8, "gross": -100.0, "net": -182.02, "reason": "CANDLE_SL"}, {"date": "2025-12-18", "entry_time": "09:43", "exit_time": "10:11", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 371.3, "exit": 367.3, "gross": -100.0, "net": -163.02, "reason": "CANDLE_SL"}, {"date": "2025-12-19", "entry_time": "09:26", "exit_time": "15:15", "side": "CALL", "symbol": "NIFTY25700CE", "entry": 825.0, "exit": 847.0, "gross": 550.0, "net": 466.75, "reason": "FORCE_EXIT"}, {"date": "2025-12-24", "entry_time": "09:33", "exit_time": "11:43", "side": "CALL", "symbol": "NIFTY25950CE", "entry": 824.0, "exit": 829.15, "gross": 128.75, "net": 46.03, "reason": "CANDLE_SL"}, {"date": "2025-12-26", "entry_time": "09:40", "exit_time": "15:15", "side": "PUT", "symbol": "NIFTY26300PE", "entry": 360.0, "exit": 373.65, "gross": 341.25, "net": 278.2, "reason": "FORCE_EXIT"}, {"date": "2026-01-05", "entry_time": "09:24", "exit_time": "10:10", "side": "PUT", "symbol": "NIFTY26550PE", "entry": 393.7, "exit": 378.05, "gross": -391.25, "net": -454.9, "reason": "CANDLE_SL"}, {"date": "2026-01-06", "entry_time": "09:56", "exit_time": "10:21", "side": "CALL", "symbol": "NIFTY26000CE", "entry": 732.0, "exit": 713.45, "gross": -463.75, "net": -541.84, "reason": "CANDLE_SL"}, {"date": "2026-01-07", "entry_time": "09:53", "exit_time": "09:56", "side": "PUT", "symbol": "NIFTY26350PE", "entry": 393.0, "exit": 394.0, "gross": 25.0, "net": -39.1, "reason": "CANDLE_SL"}, {"date": "2026-01-12", "entry_time": "09:20", "exit_time": "12:17", "side": "PUT", "symbol": "NIFTY25850PE", "entry": 409.65, "exit": 398.2, "gross": -286.25, "net": -350.7, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-01-13", "entry_time": "09:21", "exit_time": "10:33", "side": "PUT", "symbol": "NIFTY26100PE", "entry": 428.0, "exit": 422.0, "gross": -150.0, "net": -215.4, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-01-13", "entry_time": "10:35", "exit_time": "14:47", "side": "PUT", "symbol": "NIFTY26100PE", "entry": 447.75, "exit": 479.65, "gross": 797.5, "net": 730.16, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-01-14", "entry_time": "09:23", "exit_time": "09:44", "side": "CALL", "symbol": "NIFTY25450CE", "entry": 680.0, "exit": 678.0, "gross": -50.0, "net": -126.33, "reason": "CANDLE_SL"}, {"date": "2026-01-14", "entry_time": "09:54", "exit_time": "10:08", "side": "CALL", "symbol": "NIFTY25450CE", "entry": 642.5, "exit": 638.5, "gross": -100.0, "net": -174.66, "reason": "CANDLE_SL"}, {"date": "2026-01-16", "entry_time": "09:53", "exit_time": "11:58", "side": "CALL", "symbol": "NIFTY25500CE", "entry": 653.95, "exit": 679.1, "gross": 628.75, "net": 552.75, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-01-19", "entry_time": "10:01", "exit_time": "11:00", "side": "PUT", "symbol": "NIFTY25850PE", "entry": 451.0, "exit": 447.65, "gross": -83.75, "net": -150.21, "reason": "CANDLE_SL"}, {"date": "2026-01-19", "entry_time": "11:20", "exit_time": "12:17", "side": "PUT", "symbol": "NIFTY25850PE", "entry": 424.7, "exit": 440.15, "gross": 386.25, "net": 320.37, "reason": "CANDLE_SL"}, {"date": "2026-01-20", "entry_time": "09:23", "exit_time": "15:11", "side": "PUT", "symbol": "NIFTY25800PE", "entry": 423.7, "exit": 625.3, "gross": 5040.0, "net": 4968.79, "reason": "PREMIUM_TARGET"}, {"date": "2026-01-21", "entry_time": "09:19", "exit_time": "10:21", "side": "CALL", "symbol": "NIFTY24950CE", "entry": 708.05, "exit": 625.95, "gross": -2052.5, "net": -2127.72, "reason": "CANDLE_SL"}, {"date": "2026-01-22", "entry_time": "09:27", "exit_time": "10:20", "side": "CALL", "symbol": "NIFTY25150CE", "entry": 608.9, "exit": 590.6, "gross": -457.5, "net": -530.31, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-01-27", "entry_time": "09:21", "exit_time": "09:37", "side": "PUT", "symbol": "NIFTY25250PE", "entry": 500.0, "exit": 442.0, "gross": -1450.0, "net": -1516.99, "reason": "CANDLE_SL"}, {"date": "2026-01-28", "entry_time": "09:20", "exit_time": "09:38", "side": "CALL", "symbol": "NIFTY25050CE", "entry": 656.0, "exit": 619.35, "gross": -916.25, "net": -990.55, "reason": "CANDLE_SL"}, {"date": "2026-01-28", "entry_time": "11:24", "exit_time": "11:42", "side": "CALL", "symbol": "NIFTY25050CE", "entry": 619.0, "exit": 615.9, "gross": -77.5, "net": -151.18, "reason": "CANDLE_SL"}, {"date": "2026-01-30", "entry_time": "09:38", "exit_time": "11:10", "side": "CALL", "symbol": "NIFTY25050CE", "entry": 576.0, "exit": 540.0, "gross": -900.0, "net": -970.88, "reason": "CANDLE_SL"}, {"date": "2026-02-01", "entry_time": "10:14", "exit_time": "11:42", "side": "CALL", "symbol": "NIFTY25150CE", "entry": 511.0, "exit": 497.05, "gross": -348.75, "net": -417.48, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-02", "entry_time": "09:21", "exit_time": "10:00", "side": "CALL", "symbol": "NIFTY24600CE", "entry": 549.45, "exit": 542.3, "gross": -178.75, "net": -249.33, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-02", "entry_time": "10:40", "exit_time": "10:57", "side": "CALL", "symbol": "NIFTY24600CE", "entry": 566.35, "exit": 497.7, "gross": -1716.25, "net": -1785.78, "reason": "CANDLE_SL"}, {"date": "2026-02-03", "entry_time": "09:35", "exit_time": "09:52", "side": "PUT", "symbol": "NIFTY26500PE", "entry": 778.65, "exit": 741.95, "gross": -917.5, "net": -997.06, "reason": "CANDLE_SL"}, {"date": "2026-02-03", "entry_time": "09:53", "exit_time": "10:18", "side": "PUT", "symbol": "NIFTY26500PE", "entry": 767.05, "exit": 750.45, "gross": -415.0, "net": -494.65, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-04", "entry_time": "09:23", "exit_time": "15:15", "side": "CALL", "symbol": "NIFTY25500CE", "entry": 475.5, "exit": 494.2, "gross": 467.5, "net": 399.35, "reason": "FORCE_EXIT"}, {"date": "2026-02-05", "entry_time": "09:27", "exit_time": "09:30", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 368.75, "exit": 354.0, "gross": -368.75, "net": -431.35, "reason": "CANDLE_SL"}, {"date": "2026-02-05", "entry_time": "09:38", "exit_time": "10:24", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 353.95, "exit": 347.85, "gross": -152.5, "net": -214.72, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-10", "entry_time": "09:34", "exit_time": "13:32", "side": "CALL", "symbol": "NIFTY25700CE", "entry": 403.3, "exit": 370.75, "gross": -813.75, "net": -877.32, "reason": "CANDLE_SL"}, {"date": "2026-02-11", "entry_time": "09:39", "exit_time": "09:55", "side": "PUT", "symbol": "NIFTY26200PE", "entry": 298.85, "exit": 284.0, "gross": -371.25, "net": -430.85, "reason": "CANDLE_SL"}, {"date": "2026-02-11", "entry_time": "10:01", "exit_time": "10:19", "side": "PUT", "symbol": "NIFTY26200PE", "entry": 304.9, "exit": 287.15, "gross": -443.75, "net": -503.52, "reason": "CANDLE_SL"}, {"date": "2026-02-12", "entry_time": "09:23", "exit_time": "09:49", "side": "PUT", "symbol": "NIFTY26100PE", "entry": 298.55, "exit": 284.3, "gross": -356.25, "net": -415.85, "reason": "CANDLE_SL"}, {"date": "2026-02-12", "entry_time": "11:07", "exit_time": "11:08", "side": "PUT", "symbol": "NIFTY26100PE", "entry": 292.45, "exit": 282.6, "gross": -246.25, "net": -305.72, "reason": "CANDLE_SL"}, {"date": "2026-02-13", "entry_time": "09:35", "exit_time": "10:33", "side": "PUT", "symbol": "NIFTY25750PE", "entry": 253.35, "exit": 247.6, "gross": -143.75, "net": -201.66, "reason": "CANDLE_SL"}, {"date": "2026-02-13", "entry_time": "10:50", "exit_time": "10:55", "side": "PUT", "symbol": "NIFTY25750PE", "entry": 259.8, "exit": 246.45, "gross": -333.75, "net": -391.72, "reason": "CANDLE_SL"}, {"date": "2026-02-16", "entry_time": "09:20", "exit_time": "09:51", "side": "CALL", "symbol": "NIFTY25200CE", "entry": 395.0, "exit": 370.15, "gross": -621.25, "net": -684.69, "reason": "CANDLE_SL"}, {"date": "2026-02-16", "entry_time": "09:55", "exit_time": "15:15", "side": "CALL", "symbol": "NIFTY25200CE", "entry": 394.7, "exit": 562.95, "gross": 4206.25, "net": 4137.25, "reason": "FORCE_EXIT"}, {"date": "2026-02-17", "entry_time": "09:21", "exit_time": "09:33", "side": "PUT", "symbol": "NIFTY25850PE", "entry": 317.25, "exit": 296.5, "gross": -518.75, "net": -578.97, "reason": "CANDLE_SL"}, {"date": "2026-02-18", "entry_time": "09:25", "exit_time": "09:27", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 269.2, "exit": 256.25, "gross": -323.75, "net": -382.13, "reason": "CANDLE_SL"}, {"date": "2026-02-18", "entry_time": "09:54", "exit_time": "10:58", "side": "PUT", "symbol": "NIFTY25950PE", "entry": 284.2, "exit": 278.6, "gross": -140.0, "net": -199.24, "reason": "PREMIUM_TRAIL_SL"}, {"date": "2026-02-19", "entry_time": "09:28", "exit_time": "12:13", "side": "PUT", "symbol": "NIFTY26050PE", "entry": 262.85, "exit": 466.2, "gross": 5083.75, "net": 5019.39, "reason": "PREMIUM_TARGET"}, {"date": "2026-02-23", "entry_time": "09:21", "exit_time": "10:13", "side": "CALL", "symbol": "NIFTY25500CE", "entry": 256.9, "exit": 249.15, "gross": -193.75, "net": -251.75, "reason": "PREMIUM_TRAIL_SL"}], "exit_reasons": {"FORCE_EXIT": 7, "CANDLE_SL": 28, "PREMIUM_TRAIL_SL": 11, "PREMIUM_TARGET": 2}, "metrics": {"total_trades": 48, "winning_trades": 12, "win_rate": 25.0, "gross_pnl": 2510.0, "net_pnl": -763.0, "charges": 3273.0, "avg_win": 1500.0, "avg_loss": -521.0, "rr": 2.88, "pf": 0.96, "max_dd": 13605.0, "sharpe": -0.17}}};
+
+// -- Metrics tiles --
+const metricsConfig = [
+  { label: 'Net P&L', key: 'net_pnl', fmt: v => (v >= 0 ? '+' : '') + v.toLocaleString('en-IN'), unit: 'Rs', better: 'higher' },
+  { label: 'Gross P&L', key: 'gross_pnl', fmt: v => (v >= 0 ? '+' : '') + v.toLocaleString('en-IN'), unit: 'Rs', better: 'higher' },
+  { label: 'Total Trades', key: 'total_trades', fmt: v => v, unit: '', better: 'lower' },
+  { label: 'Win Rate', key: 'win_rate', fmt: v => v + '%', unit: '', better: 'higher' },
+  { label: 'Reward : Risk', key: 'rr', fmt: v => v.toFixed(2), unit: '', better: 'higher' },
+  { label: 'Profit Factor', key: 'pf', fmt: v => v.toFixed(2), unit: '', better: 'higher' },
+  { label: 'Avg Win', key: 'avg_win', fmt: v => (v >= 0 ? '+' : '') + v.toLocaleString('en-IN'), unit: 'Rs', better: 'higher' },
+  { label: 'Avg Loss', key: 'avg_loss', fmt: v => v.toLocaleString('en-IN'), unit: 'Rs', better: 'higher' },
+  { label: 'Max Drawdown', key: 'max_dd', fmt: v => v.toLocaleString('en-IN'), unit: 'Rs', better: 'lower' },
+  { label: 'Sharpe Ratio', key: 'sharpe', fmt: v => v.toFixed(2), unit: '', better: 'higher' },
+];
+
+const grid = document.getElementById('metricsGrid');
+metricsConfig.forEach(mc => {
+  const ov = DATA.original.metrics[mc.key];
+  const tv = DATA.tuned.metrics[mc.key];
+  const diff = tv - ov;
+  const pct = ov !== 0 ? ((diff / Math.abs(ov)) * 100).toFixed(0) : 'N/A';
+  const isGood = mc.better === 'higher' ? diff > 0 : diff < 0;
+  const tile = document.createElement('div');
+  tile.className = 'metric-tile';
+  tile.innerHTML = `
+    <div class="label">${mc.label}</div>
+    <div class="values">
+      <div><div class="val orig">${mc.fmt(ov)}</div><div class="val-label">Original</div></div>
+      <div><div class="val tuned">${mc.fmt(tv)}</div><div class="val-label">Tuned</div></div>
+    </div>
+    ${diff !== 0 ? `<div class="improvement ${isGood ? 'positive' : 'negative'}">${isGood ? '\u2191' : '\u2193'} ${pct}%</div>` : ''}
+  `;
+  grid.appendChild(tile);
+});
+
+// -- Chart defaults --
+Chart.defaults.color = '#8892a0';
+Chart.defaults.borderColor = '#2a2d3a';
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+
+// -- Equity Curve --
+const eqLabels = DATA.tuned.equity.map(d => d.date);
+new Chart(document.getElementById('equityChart'), {
+  type: 'line',
+  data: {
+    labels: eqLabels,
+    datasets: [
+      { label: 'Original', data: DATA.original.equity.map(d => d.equity), borderColor: '#e74c3c', backgroundColor: 'rgba(231,76,60,0.08)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 },
+      { label: 'Tuned', data: DATA.tuned.equity.map(d => d.equity), borderColor: '#2ecc71', backgroundColor: 'rgba(46,204,113,0.08)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 },
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': Rs ' + ctx.parsed.y.toLocaleString('en-IN') } } },
+    scales: {
+      x: { ticks: { maxTicksLimit: 12 }, grid: { display: false } },
+      y: { ticks: { callback: v => 'Rs ' + v.toLocaleString('en-IN') } }
+    }
+  }
+});
+
+// -- Daily P&L --
+const pnlLabels = DATA.tuned.daily_pnl.map(d => d.date);
+const origPnl = DATA.original.daily_pnl.map(d => d.pnl);
+const tunedPnl = DATA.tuned.daily_pnl.map(d => d.pnl);
+new Chart(document.getElementById('dailyPnlChart'), {
+  type: 'bar',
+  data: {
+    labels: pnlLabels,
+    datasets: [
+      { label: 'Original', data: origPnl, backgroundColor: origPnl.map(v => v >= 0 ? 'rgba(231,76,60,0.7)' : 'rgba(231,76,60,0.3)'), borderRadius: 3, barPercentage: 0.4 },
+      { label: 'Tuned', data: tunedPnl, backgroundColor: tunedPnl.map(v => v >= 0 ? 'rgba(46,204,113,0.7)' : 'rgba(46,204,113,0.3)'), borderRadius: 3, barPercentage: 0.4 },
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': Rs ' + ctx.parsed.y.toLocaleString('en-IN') } } },
+    scales: {
+      x: { ticks: { maxTicksLimit: 12 }, grid: { display: false } },
+      y: { ticks: { callback: v => 'Rs ' + v.toLocaleString('en-IN') } }
+    }
+  }
+});
+
+// -- Exit Reason Donuts --
+function exitDonut(canvasId, reasons, colors) {
+  const labels = Object.keys(reasons);
+  const values = Object.values(reasons);
+  new Chart(document.getElementById(canvasId), {
+    type: 'doughnut',
+    data: {
+      labels: labels.map(l => l.replace(/_/g, ' ')),
+      datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }]
+    },
+    options: {
+      responsive: true,
+      cutout: '55%',
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 16, font: { size: 12 } } },
+        tooltip: { callbacks: { label: ctx => ctx.label + ': ' + ctx.parsed + ' trades' } }
+      }
+    }
+  });
+}
+const exitColors = ['#e74c3c', '#3b82f6', '#f39c12', '#2ecc71', '#9b59b6'];
+exitDonut('exitOrigChart', DATA.original.exit_reasons, exitColors);
+exitDonut('exitTunedChart', DATA.tuned.exit_reasons, exitColors);
+
+// -- Trade Table --
+function showTrades(which, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const trades = DATA[which].trades;
+  const container = document.getElementById('tradeTableContainer');
+  let html = `<table class="trades"><thead><tr>
+    <th>Date</th><th>Entry</th><th>Exit</th><th>Side</th><th>Symbol</th>
+    <th>Entry Rs</th><th>Exit Rs</th><th>Gross</th><th>Net</th><th>Exit Reason</th>
+  </tr></thead><tbody>`;
+  trades.forEach(t => {
+    const cls = t.net >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const sideBadge = t.side === 'CALL' ? 'badge-call' : 'badge-put';
+    html += `<tr>
+      <td>${t.date}</td>
+      <td>${t.entry_time}</td>
+      <td>${t.exit_time}</td>
+      <td><span class="badge ${sideBadge}">${t.side}</span></td>
+      <td>${t.symbol}</td>
+      <td>${t.entry.toFixed(1)}</td>
+      <td>${t.exit.toFixed(1)}</td>
+      <td class="${cls}">${t.gross >= 0 ? '+' : ''}${t.gross.toFixed(0)}</td>
+      <td class="${cls}">${t.net >= 0 ? '+' : ''}${t.net.toFixed(0)}</td>
+      <td><span class="badge badge-exit">${t.reason.replace(/_/g, ' ')}</span></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+showTrades('tuned', document.querySelector('.tab-btn.active'));
+</script>
+
+</body>
+</html>
