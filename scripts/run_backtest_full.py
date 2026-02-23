@@ -77,11 +77,14 @@ for td in trading_days:
             if opt_list:
                 option_candles[symbol] = opt_list
 
+    # Use synthetic premiums when no option data is available
+    use_synthetic = not option_candles
     result = engine.run_day(
         trading_date=datetime.combine(td, datetime.min.time()),
         underlying_candles=underlying,
         option_candles=option_candles,
         warmup_candles=prev_warmup,
+        synthetic_premiums=use_synthetic,
     )
     day_results.append(result)
     prev_warmup = underlying[-config.strategy.warmup_candles:]

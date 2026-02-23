@@ -7,10 +7,15 @@ from typing import Optional
 
 from orb.backtest.broker_sim import BrokerSimulator
 from orb.config import AppConfig
-from orb.models import Candle, TradeRecord
+from orb.models import Candle, Side, TradeRecord
 from orb.strategy.session import TradingSession
 
 logger = logging.getLogger(__name__)
+
+# Default delta for ITM options (~200 pts ITM).
+# Used to synthesise premiums when real option data is unavailable.
+_SYNTHETIC_DELTA = 0.65
+_SYNTHETIC_BASE_PREMIUM = 350.0  # Typical ITM premium at entry
 
 
 class DayResult:
@@ -58,6 +63,7 @@ class BacktestEngine:
         underlying_candles: list[Candle],
         option_candles: dict[str, list[Candle]],
         warmup_candles: list[Candle] | None = None,
+        synthetic_premiums: bool = False,
     ) -> DayResult:
         """Run the strategy for a single day.
 
@@ -76,8 +82,17 @@ class BacktestEngine:
         session = TradingSession(self._config, trading_date)
 
         # Tell the session which option symbols are available
-        for sym in option_candles:
-            session.set_option_symbol(sym)
+        if option_candles:
+            for sym in option_candles:
+                session.set_option_symbol(sym)
+        elif synthetic_premiums:
+            # Register synthetic option symbols based on day's opening spot
+            spot = underlying_candles[0].open
+            rounded = round(spot / self._config.market.strike_step) * self._config.market.strike_step
+            call_strike = rounded - self._config.market.itm_offset
+            put_strike = rounded + self._config.market.itm_offset
+            session.set_option_symbol(f"NIFTY{call_strike:.0f}CE")
+            session.set_option_symbol(f"NIFTY{put_strike:.0f}PE")
 
         # Warm up indicators
         if warmup_candles:
@@ -85,11 +100,19 @@ class BacktestEngine:
 
         logger.info(f"=== Day: {trading_date.date()} | {len(underlying_candles)} candles ===")
 
+        # Track reference price for synthetic premium calculation
+        self._synthetic_ref_price: float | None = None
+
         for candle in underlying_candles:
             # Find matching option premium
-            option_premium = self._get_option_premium(
-                session, candle, option_candles
-            )
+            if synthetic_premiums and not option_candles:
+                option_premium = self._get_synthetic_premium(
+                    session, candle
+                )
+            else:
+                option_premium = self._get_option_premium(
+                    session, candle, option_candles
+                )
 
             trade = session.process_candle(candle, option_premium)
 
@@ -157,3 +180,34 @@ class BacktestEngine:
                 return opt_candle.close
 
         return None
+
+    def _get_synthetic_premium(
+        self,
+        session: TradingSession,
+        candle: Candle,
+    ) -> Optional[float]:
+        """Approximate option premium from underlying price when real data is unavailable.
+
+        Uses a fixed delta model: premium_change ≈ delta × underlying_change.
+        For ITM calls, premium rises when underlying rises.
+        For ITM puts, premium rises when underlying falls.
+        """
+        if not session._breakout or not session._breakout.is_confirmed:
+            return None
+
+        breakout = session._breakout.breakout
+        side = breakout.side
+
+        # Set reference price on first call after breakout
+        if self._synthetic_ref_price is None:
+            self._synthetic_ref_price = candle.open
+            return _SYNTHETIC_BASE_PREMIUM
+
+        underlying_change = candle.close - self._synthetic_ref_price
+
+        if side == Side.CALL:
+            premium = _SYNTHETIC_BASE_PREMIUM + _SYNTHETIC_DELTA * underlying_change
+        else:  # PUT
+            premium = _SYNTHETIC_BASE_PREMIUM - _SYNTHETIC_DELTA * underlying_change
+
+        return max(0.05, premium)
