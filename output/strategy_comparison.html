@@ -370,9 +370,17 @@ new Chart(document.getElementById('dailyPnlChart'), {
 });
 
 // -- Exit Reason Donuts --
-function exitDonut(canvasId, reasons, colors) {
+const exitColorMap = {
+  'CANDLE_SL': '#e74c3c',
+  'PREMIUM_TRAIL_SL': '#3b82f6',
+  'FORCE_EXIT': '#f39c12',
+  'PREMIUM_TARGET': '#2ecc71',
+  'TIME_EXIT': '#9b59b6'
+};
+function exitDonut(canvasId, reasons) {
   const labels = Object.keys(reasons);
   const values = Object.values(reasons);
+  const colors = labels.map(l => exitColorMap[l] || '#888');
   new Chart(document.getElementById(canvasId), {
     type: 'doughnut',
     data: {
@@ -389,9 +397,8 @@ function exitDonut(canvasId, reasons, colors) {
     }
   });
 }
-const exitColors = ['#e74c3c', '#3b82f6', '#f39c12', '#2ecc71', '#9b59b6'];
-exitDonut('exitOrigChart', DATA.original.exit_reasons, exitColors);
-exitDonut('exitTunedChart', DATA.tuned.exit_reasons, exitColors);
+exitDonut('exitOrigChart', DATA.original.exit_reasons);
+exitDonut('exitTunedChart', DATA.tuned.exit_reasons);
 
 // -- Trade Table --
 function showTrades(which, btn) {
