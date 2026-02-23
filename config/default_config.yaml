@@ -1,0 +1,60 @@
+# NIFTY 3-Min ORB Options Strategy Configuration
+
+market:
+  symbol: "NIFTY 50"
+  exchange: "NSE"
+  options_exchange: "NFO"
+  lot_size: 25
+  strike_step: 50         # NIFTY strikes are in multiples of 50
+  itm_offset: 200         # How deep ITM (points from rounded spot)
+
+session:
+  market_open: "09:15"
+  market_close: "15:30"
+  orb_candles: 3           # Number of 1-min candles for opening range
+  orb_end: "09:18"         # 09:15 + 3 minutes
+  no_new_entry_after: "11:30"
+  force_exit_time: "15:15"
+
+strategy:
+  max_positions: 1          # One position at a time (conservative)
+  max_re_entries_per_side: 4
+  candle_interval: "minute" # 1-minute candles
+
+  # RSI filter
+  rsi_period: 14
+  rsi_entry_min: 40
+  rsi_entry_max: 65
+
+  # SuperTrend filter
+  supertrend_period: 10
+  supertrend_multiplier: 3.0
+
+  # Indicator warmup
+  warmup_candles: 30        # Prior day candles for indicator warmup
+
+  # Premium trailing ladder (points gained → trail SL to)
+  trailing_ladder:
+    - trigger: 30
+      trail_to: 0           # Cost (breakeven)
+    - trigger: 60
+      trail_to: 30
+    - trigger: 90
+      trail_to: 60
+    - trigger: 120
+      trail_to: 90
+    - trigger: 150
+      trail_to: -1          # -1 = full exit
+
+backtest:
+  slippage_points: 2.0      # Per leg slippage in option premium
+  brokerage_per_order: 20.0
+  stt_rate: 0.000625        # 0.0625% on sell side (options)
+  gst_rate: 0.18            # 18% on brokerage
+  sebi_charges: 0.000001    # Per turnover
+  stamp_duty: 0.00003       # On buy side
+  exchange_txn_charge: 0.00053  # NSE options
+
+reporting:
+  risk_free_rate: 0.065     # For Sharpe ratio (6.5% Indian T-bill)
+  output_dir: "output"

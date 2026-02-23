@@ -1,0 +1,48 @@
+{
+  "description": "Sample single-day data for golden test — 2025-01-06 NIFTY CALL breakout scenario",
+  "date": "2025-01-06",
+  "scenario": "CALL breakout at 09:19, entry at 09:20, SL hit at 09:35 (Regime A)",
+  "orb": {
+    "h3": 24070,
+    "l3": 23980
+  },
+  "breakout": {
+    "side": "CALL",
+    "candle_minute": 19,
+    "h1": 24090,
+    "l1": 24030
+  },
+  "expected_trades": [
+    {
+      "side": "CALL",
+      "entry_minute": 20,
+      "exit_minute": 35,
+      "entry_premium": 285,
+      "exit_premium": 250,
+      "exit_reason": "CANDLE_SL",
+      "regime_at_exit": "A",
+      "gross_pnl_per_lot": -875,
+      "note": "(250-285) * 25 = -875"
+    }
+  ],
+  "underlying_candles": [
+    {"time": "09:15", "o": 24000, "h": 24050, "l": 23980, "c": 24030},
+    {"time": "09:16", "o": 24030, "h": 24060, "l": 24010, "c": 24040},
+    {"time": "09:17", "o": 24040, "h": 24070, "l": 24020, "c": 24050},
+    {"time": "09:18", "o": 24060, "h": 24090, "l": 24055, "c": 24080},
+    {"time": "09:19", "o": 24080, "h": 24095, "l": 24075, "c": 24090},
+    {"time": "09:20", "o": 24085, "h": 24095, "l": 24080, "c": 24090},
+    {"time": "09:35", "o": 24040, "h": 24045, "l": 24025, "c": 24028}
+  ],
+  "option_candles": {
+    "NIFTY23800CE": [
+      {"time": "09:15", "o": 270, "h": 280, "l": 265, "c": 275},
+      {"time": "09:16", "o": 275, "h": 285, "l": 272, "c": 280},
+      {"time": "09:17", "o": 280, "h": 290, "l": 278, "c": 285},
+      {"time": "09:18", "o": 285, "h": 295, "l": 283, "c": 290},
+      {"time": "09:19", "o": 290, "h": 298, "l": 288, "c": 295},
+      {"time": "09:20", "o": 282, "h": 290, "l": 280, "c": 285},
+      {"time": "09:35", "o": 255, "h": 258, "l": 248, "c": 250}
+    ]
+  }
+}

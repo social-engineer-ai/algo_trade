@@ -1,0 +1,30 @@
+# Secrets
+.env
+data/.kite_access_token
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# pytest
+.pytest_cache/
+
+# Output
+output/
+data/*.db
+
+# OS
+.DS_Store
+Thumbs.db
