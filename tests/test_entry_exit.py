@@ -101,7 +101,9 @@ def test_entry_blocked_by_re_entry_limit():
     breakout = _breakout_info(Side.CALL, h1=24090, l1=24030)
     candle = _candle(20, 24080, 24095, 24075, 24090)
 
-    result = entry.check_entry(candle, breakout, entries_this_side=4, current_time=time(9, 20))
+    # max_re_entries=4 means first entry + 4 re-entries = 5 total allowed
+    # entries_this_side=5 means 5 already taken, so next is blocked
+    result = entry.check_entry(candle, breakout, entries_this_side=5, current_time=time(9, 20))
     assert result is None
 
 

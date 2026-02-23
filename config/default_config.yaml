@@ -18,32 +18,32 @@ session:
 
 strategy:
   max_positions: 1          # One position at a time (conservative)
-  max_re_entries_per_side: 4
+  max_re_entries_per_side: 1
   candle_interval: "minute" # 1-minute candles
 
-  # RSI filter
+  # RSI filter (disabled — sweep showed RSI off performs best)
   rsi_period: 14
-  rsi_entry_min: 40
-  rsi_entry_max: 65
+  rsi_entry_min: 0
+  rsi_entry_max: 100
 
-  # SuperTrend filter
-  supertrend_period: 10
+  # SuperTrend filter (ST 14,3.0 — best from parameter sweep)
+  supertrend_period: 14
   supertrend_multiplier: 3.0
 
   # Indicator warmup
   warmup_candles: 30        # Prior day candles for indicator warmup
 
-  # Premium trailing ladder (points gained → trail SL to)
+  # Premium trailing ladder (wider 40-step — best from parameter sweep)
   trailing_ladder:
-    - trigger: 30
+    - trigger: 40
       trail_to: 0           # Cost (breakeven)
-    - trigger: 60
-      trail_to: 30
-    - trigger: 90
-      trail_to: 60
+    - trigger: 80
+      trail_to: 40
     - trigger: 120
-      trail_to: 90
-    - trigger: 150
+      trail_to: 80
+    - trigger: 160
+      trail_to: 120
+    - trigger: 200
       trail_to: -1          # -1 = full exit
 
 backtest:

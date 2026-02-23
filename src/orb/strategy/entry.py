@@ -65,8 +65,9 @@ class EntrySignal:
         if current_time > self._no_entry_after:
             return None
 
-        # Re-entry limit
-        if entries_this_side >= self._max_re_entries:
+        # Re-entry limit: max_re_entries is the number of allowed RE-entries
+        # (entries beyond the first). First entry is always allowed.
+        if entries_this_side > self._max_re_entries:
             return None
 
         # Get current indicator values
