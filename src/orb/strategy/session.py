@@ -51,6 +51,14 @@ class TradingSession:
         self._candle_count = 0
         self._last_candle: Optional[Candle] = None
         self._day_done = False
+        self._available_option_symbols: dict[str, str] = {}  # "CE"→symbol, "PE"→symbol
+
+    def set_option_symbol(self, symbol: str) -> None:
+        """Register an available option symbol for the day."""
+        if symbol.endswith("CE"):
+            self._available_option_symbols["CE"] = symbol
+        elif symbol.endswith("PE"):
+            self._available_option_symbols["PE"] = symbol
 
     @property
     def trades(self) -> list[TradeRecord]:
@@ -135,8 +143,9 @@ class TradingSession:
                 return trade
 
         # --- Phase 4: Entry check (if not in position) ---
+        # Allow entry from IDLE (re-entry after exit) or WAITING_ENTRY (first entry after breakout)
         if (
-            self._position.is_idle
+            not self._position.is_active
             and self._breakout
             and self._breakout.is_confirmed
             and self._entry
@@ -165,20 +174,24 @@ class TradingSession:
     ) -> None:
         """Execute entry into a position."""
         breakout = self._breakout.breakout
-        # Determine option type and strike
         option_type = "CE" if side == Side.CALL else "PE"
 
-        # ITM strike selection
-        spot = candle.close
-        strike_step = self._config.market.strike_step
-        itm_offset = self._config.market.itm_offset
-        rounded_spot = round(spot / strike_step) * strike_step
-        if side == Side.CALL:
-            strike = rounded_spot - itm_offset
+        # Use registered symbol if available, else compute from current price
+        if option_type in self._available_option_symbols:
+            option_symbol = self._available_option_symbols[option_type]
+            # Extract strike from symbol (e.g. "NIFTY25850PE" → 25850)
+            strike_str = option_symbol.replace("NIFTY", "").replace("CE", "").replace("PE", "")
+            strike = float(strike_str)
         else:
-            strike = rounded_spot + itm_offset
-
-        option_symbol = f"NIFTY{strike:.0f}{option_type}"
+            spot = candle.close
+            strike_step = self._config.market.strike_step
+            itm_offset = self._config.market.itm_offset
+            rounded_spot = round(spot / strike_step) * strike_step
+            if side == Side.CALL:
+                strike = rounded_spot - itm_offset
+            else:
+                strike = rounded_spot + itm_offset
+            option_symbol = f"NIFTY{strike:.0f}{option_type}"
 
         logger.info(
             f"ENTRY: {side.name} @ {candle.timestamp}, "

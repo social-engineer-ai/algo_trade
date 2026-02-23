@@ -75,6 +75,10 @@ class BacktestEngine:
         """
         session = TradingSession(self._config, trading_date)
 
+        # Tell the session which option symbols are available
+        for sym in option_candles:
+            session.set_option_symbol(sym)
+
         # Warm up indicators
         if warmup_candles:
             session.warm_up(warmup_candles)
@@ -120,26 +124,27 @@ class BacktestEngine:
         """Look up option premium for the current candle timestamp.
 
         If position is active, look up the specific option being traded.
-        If no position, try to find the likely ITM option premium.
+        If no position, find the matching option from available data.
         """
         pos = session._position.position
 
         if pos.is_active and pos.option_symbol:
             symbol = pos.option_symbol
         elif session._breakout and session._breakout.is_confirmed:
-            # Estimate the option symbol based on current spot
             from orb.models import Side
             breakout = session._breakout.breakout
             side = breakout.side
             option_type = "CE" if side == Side.CALL else "PE"
-            strike_step = self._config.market.strike_step
-            itm_offset = self._config.market.itm_offset
-            rounded_spot = round(candle.close / strike_step) * strike_step
-            if side == Side.CALL:
-                strike = rounded_spot - itm_offset
-            else:
-                strike = rounded_spot + itm_offset
-            symbol = f"NIFTY{strike:.0f}{option_type}"
+
+            # Find the matching symbol from available option data
+            # (strike is fixed at data-fetch time based on day's open)
+            symbol = None
+            for sym in option_candles:
+                if sym.endswith(option_type):
+                    symbol = sym
+                    break
+            if symbol is None:
+                return None
         else:
             return None
 

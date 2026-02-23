@@ -129,11 +129,27 @@ class InstrumentResolver:
     # ------------------------------------------------------------------
 
     def get_nearest_expiry(self, from_date: date) -> date:
-        """Return the nearest weekly expiry (Thursday) on or after *from_date*.
+        """Return the nearest NIFTY weekly option expiry on or after *from_date*.
 
-        If *from_date* is already a Thursday it is returned as-is.
+        Queries the instruments DB for the actual next expiry rather than
+        assuming a fixed weekday (expiry day can change due to holidays or
+        exchange rule changes).
         """
-        # Thursday = weekday 3
+        sql = """
+            SELECT DISTINCT expiry
+            FROM instruments
+            WHERE name = 'NIFTY'
+              AND exchange = 'NFO'
+              AND instrument_type IN ('CE', 'PE')
+              AND expiry >= ?
+            ORDER BY expiry ASC
+            LIMIT 1
+        """
+        with self._db._connect() as conn:
+            row = conn.execute(sql, (from_date.isoformat(),)).fetchone()
+            if row:
+                return date.fromisoformat(row["expiry"])
+        # Fallback: next Thursday
         days_ahead = (3 - from_date.weekday()) % 7
         if days_ahead == 0:
             return from_date
