@@ -38,7 +38,7 @@ class BrokerSimulator:
         Charges:
         - Brokerage: flat per order × 2 (buy + sell)
         - STT: on sell side premium × lot_size × lots
-        - GST: 18% on brokerage
+        - GST: 18% on (brokerage + exchange txn + SEBI)
         - SEBI charges: on total turnover
         - Stamp duty: on buy side turnover
         - Exchange transaction charges: on total turnover
@@ -50,10 +50,10 @@ class BrokerSimulator:
 
         brokerage = self._config.brokerage_per_order * 2  # Buy + sell
         stt = sell_turnover * self._config.stt_rate
-        gst = brokerage * self._config.gst_rate
         sebi = total_turnover * self._config.sebi_charges
         stamp = buy_turnover * self._config.stamp_duty
         exchange_txn = total_turnover * self._config.exchange_txn_charge
+        gst = (brokerage + exchange_txn + sebi) * self._config.gst_rate
 
         # Slippage cost (already applied to premiums, but track separately)
         slippage_cost = self._config.slippage_points * 2 * qty  # Both legs

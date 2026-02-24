@@ -30,8 +30,8 @@ These H1/L1 levels serve as the entry trigger and initial stop loss.
 
 ### Step 3: Select the Option
 We pick an ITM option strike:
-- **CALL breakout** → Buy a CE option at `round(spot/100)*100 - 200` (200 points ITM)
-- **PUT breakout** → Buy a PE option at `round(spot/100)*100 + 200` (200 points ITM)
+- **CALL breakout** → Buy a CE option at `round(spot/50)*50 - 200` (200 points ITM)
+- **PUT breakout** → Buy a PE option at `round(spot/50)*50 + 200` (200 points ITM)
 
 ITM options are used because they have higher delta (move more with the underlying) and lower time decay compared to ATM/OTM.
 

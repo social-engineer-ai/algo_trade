@@ -49,12 +49,22 @@ strategy:
 backtest:
   slippage_points: 2.0      # Per leg slippage in option premium
   brokerage_per_order: 20.0
-  stt_rate: 0.000625        # 0.0625% on sell side (options)
+  stt_rate: 0.001            # 0.1% on sell side (options)
   gst_rate: 0.18            # 18% on brokerage
   sebi_charges: 0.000001    # Per turnover
   stamp_duty: 0.00003       # On buy side
-  exchange_txn_charge: 0.00053  # NSE options
+  exchange_txn_charge: 0.0003503  # NSE options (0.03503%)
 
 reporting:
   risk_free_rate: 0.065     # For Sharpe ratio (6.5% Indian T-bill)
   output_dir: "output"
+
+live:
+  paper_mode: true              # Start in paper mode by default
+  lots: 1                       # Number of lots to trade
+  max_daily_loss: 3000          # Kill switch: stop if net loss exceeds this
+  order_timeout_seconds: 10     # Cancel unfilled orders after this
+  telegram_bot_token: ""        # Override via TELEGRAM_BOT_TOKEN env var
+  telegram_chat_id: ""          # Override via TELEGRAM_CHAT_ID env var
+  state_file: "data/live_state.json"
+  log_file: "output/live_log.csv"
