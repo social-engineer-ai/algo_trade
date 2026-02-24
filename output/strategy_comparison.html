@@ -404,6 +404,7 @@ const exitColorMap = {
 function exitDonut(canvasId, reasons) {
   const labels = Object.keys(reasons);
   const values = Object.values(reasons);
+  const total = values.reduce((a, b) => a + b, 0);
   const colors = labels.map(l => exitColorMap[l] || '#888');
   new Chart(document.getElementById(canvasId), {
     type: 'doughnut',
@@ -416,9 +417,29 @@ function exitDonut(canvasId, reasons) {
       cutout: '55%',
       plugins: {
         legend: { position: 'bottom', labels: { padding: 16, font: { size: 12 } } },
-        tooltip: { callbacks: { label: ctx => ctx.label + ': ' + ctx.parsed + ' trades' } }
+        tooltip: { callbacks: { label: ctx => ctx.label + ': ' + ctx.parsed + ' (' + (ctx.parsed / total * 100).toFixed(1) + '%)' } },
+        datalabels: { color: '#fff', font: { weight: 'bold', size: 13 }, formatter: (val) => (val / total * 100).toFixed(0) + '%' }
       }
-    }
+    },
+    plugins: [{
+      id: 'percentLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        chart.data.datasets[0].data.forEach((val, i) => {
+          const meta = chart.getDatasetMeta(0).data[i];
+          if (!meta) return;
+          const pct = (val / total * 100).toFixed(0) + '%';
+          const { x, y } = meta.tooltipPosition();
+          ctx.save();
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 12px Segoe UI, system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(pct, x, y);
+          ctx.restore();
+        });
+      }
+    }]
   });
 }
 exitDonut('exitOrigChart', DATA.original.exit_reasons);
